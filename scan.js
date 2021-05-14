@@ -108,7 +108,7 @@ function FromDirs(){
 	//fromDir('./image1','.jpg');
 	//fromDir('./image2','.jpg');
 	setTimeout(FromDirs, 5000); // appel des 3 dossiers toutes les secondes task va appeler fromdir 3 fois
-	}
+}
 
 FromDirs();
-main()
+main();
