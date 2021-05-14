@@ -4,7 +4,13 @@ const sharp = require("sharp");
 const ObjectsToCsv = require('objects-to-csv');
 const folder_out = 'image_resized\\';
 const csv = require('csv-parser');
+const readline = require('readline');
+const rl = readline.createInterface({
+	input: process.stdin,
+	output: process.stdout
+});
 const results = [];
+const results_output = [];
 
 function fromDir(startPath,filter){
 	var list = [];
@@ -18,20 +24,16 @@ function fromDir(startPath,filter){
 	.pipe(csv({}))
 	.on('data', (data) => results.push(data))
 	.on('end', () => {
-		//console.log(results);
 		file_for_sloop:
 		for(var i=0;i<files.length;i++){
 			var filename=path.join(startPath,files[i]);
-			console.log('----------------' ,filename)
 			var stat = fs.lstatSync(filename);
 			if (stat.isDirectory()){
 				fromDir(filename,filter); //recurse
 			}
 			else if (filename.indexOf(filter)>=0) {
-				console.log('-- found: ',filename);
 				for(var j=0;j<results.length;j++){
 					var options = JSON.parse(results[j].options);
-					console.log(options.image);
 					if (options.image == filename)
 					{
 						continue file_for_sloop;
@@ -67,10 +69,46 @@ function fromDir(startPath,filter){
 	});
 };
 
+function main(){
+console.log('Hello you can add a word and we will see what we can find for you mate');
+rl.question('Question ? ', answer => {
+	fs.appendFile('file.txt', answer, err => {
+	  if (err) throw err;
+	  console.log('Let us search');
+	  fs.createReadStream('list.csv')
+	  .pipe(csv({}))
+	  .on('data', (data) => results_output.push(data))
+	  .on('end', () => {
+		for(var j=0;j<results.length;j++){
+			var options = JSON.parse(results[j].exifData);
+			if (options.ifd1MaxEntries.includes(answer))
+			{
+				console.log('found')
+				var options = JSON.parse(results_output[j].options)
+				console.log(options.image);
+			}
+			else
+			{
+				console.log(results_output[j].exifData)
+			}
+		}
+	  })
+	rl.close();
+	})
+  
+  });
 
-fromDir('./image','.jpg');
-function task(){
-setTimeout(task, 1000); // appel des 3 dossiers toutes les secondes task va appeler fromdir 3 fois
+
 }
-task()
-// 
+
+
+//main()
+function FromDirs(){
+	fromDir('./image','.jpg');
+	//fromDir('./image1','.jpg');
+	//fromDir('./image2','.jpg');
+	setTimeout(FromDirs, 5000); // appel des 3 dossiers toutes les secondes task va appeler fromdir 3 fois
+	}
+
+FromDirs();
+main()
