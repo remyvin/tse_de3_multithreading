@@ -4,13 +4,12 @@ const sharp = require("sharp");
 const ObjectsToCsv = require('objects-to-csv');
 const folder_out = 'image_resized\\';
 const csv = require('csv-parser');
-const readline = require('readline');
-const rl = readline.createInterface({
+var readline = require('readline');
+const results = [];
+const r1 = readline.createInterface({
 	input: process.stdin,
 	output: process.stdout
 });
-const results = [];
-const results_output = [];
 
 function fromDir(startPath,filter){
 	var list = [];
@@ -24,6 +23,7 @@ function fromDir(startPath,filter){
 	.pipe(csv({}))
 	.on('data', (data) => results.push(data))
 	.on('end', () => {
+		console.log(files);
 		file_for_sloop:
 		for(var i=0;i<files.length;i++){
 			var filename=path.join(startPath,files[i]);
@@ -39,7 +39,6 @@ function fromDir(startPath,filter){
 						continue file_for_sloop;
 					}
 				}
-				console.log('-- found and accepted: ',filename);
 				(async function () { // asynchrone 
 					try {
 						// Get file name
@@ -69,46 +68,52 @@ function fromDir(startPath,filter){
 	});
 };
 
-function main(){
-console.log('Hello you can add a word and we will see what we can find for you mate');
-rl.question('Question ? ', answer => {
-	fs.appendFile('file.txt', answer, err => {
-	  if (err) throw err;
-	  console.log('Let us search');
-	  fs.createReadStream('list.csv')
-	  .pipe(csv({}))
-	  .on('data', (data) => results_output.push(data))
-	  .on('end', () => {
-		for(var j=0;j<results.length;j++){
-			var options = JSON.parse(results[j].exifData);
-			if (options.ifd1MaxEntries.includes(answer))
-			{
-				console.log('found')
-				var options = JSON.parse(results_output[j].options)
-				console.log(options.image);
-			}
-			else
-			{
-				console.log(results_output[j].exifData)
-			}
+async function main(){
+	const results_output = [];
+	var clef = await ask("Hello you can add a word and we will see what we can find for you mate ? ")
+	fs.createReadStream('list.csv')
+	.pipe(csv({}))
+	.on('data', (data) => results_output.push(data))
+	.on('end', async(recommencer) => {
+		for(var j=0;j<results_output.length;j++){
+			var image_path;
+			var display = 0;
+			JSON.parse(results_output[j].options, (key, value) => {
+				if (key == "image")
+				{
+					image_path = value;
+				}
+				if (value == clef){
+					if (display == 0)
+					{
+						console.log(image_path);
+						display = 1;
+					}
+				}
+			});
 		}
-	  })
-	rl.close();
-	})
-  
-  });
-
-
-}
-
-
+		recommencer = await ask("Do you want to continue ? If Yes, Press y : ")
+		if( recommencer == 'y')
+		{
+			setTimeout(main, 1000);	
+		}
+		else 
+		{
+			process.exit()
+		}
+	});
+};
+function ask(questionText) {
+	return new Promise((resolve, reject) => {
+	  r1.question(questionText, resolve);
+	});
+  }
 //main()
 function FromDirs(){
 	fromDir('./image','.jpg');
-	//fromDir('./image1','.jpg');
-	//fromDir('./image2','.jpg');
+	fromDir('./image1','.jpg');
+	fromDir('./image2','.jpg');
 	setTimeout(FromDirs, 5000); // appel des 3 dossiers toutes les secondes task va appeler fromdir 3 fois
 }
-
-FromDirs();
 main();
+FromDirs();
