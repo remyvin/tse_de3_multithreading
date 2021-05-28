@@ -94,7 +94,7 @@ function clean_directory(folder_path){
 /* Main thread */
 async function main(){
 
-	var clef = await ask("Hello put a keyword :)")
+	var clef = await ask("Hello write a keyword :")
 	var query = keyWordModel.distinct('Filename', { "Keyword" : clef } );
 	query.exec(function (err, comms) {
 		if (err) { throw err; }
@@ -151,8 +151,8 @@ function traitement_image (image_path, csv_path, image_output_path) { // asynchr
 			resolve();
 		});
 	}).then(() => console.log(csv_path + ' processed'));
-	// resize promise est une promis fournie par sharp qui redimensionne l'image
-	const resized_promise = sharp(image_path).resize(50, 50).png().toFile(image_output_path).then(() => console.log(image_path + ' processed'));
+	// resize promise est une promise fournie par sharp qui redimensionne l'image
+	const resized_promise = sharp(image_path).resize(30, 50).png().toFile(image_output_path).then(() => console.log(image_path + ' processed'));
 	// on veut attendre que les deux promise ( csv et sharp ) soient completes donc on renvoie une promise composite
 	return Promise.all([csv_promise, resized_promise]); 
 };
