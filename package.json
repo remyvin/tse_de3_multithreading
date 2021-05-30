@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "mongoose": "^5.12.12",
+    "worker-threads": "^1.0.0"
+  }
+}

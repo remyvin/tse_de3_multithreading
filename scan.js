@@ -6,6 +6,10 @@ const csv =    			require('csv-parser');
 var readline = 			require('readline');
 var mongoose = 			require('mongoose');
 
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
+UV_THREADPOOL_SIZE= 1000
+const threads = new Set();
+
 sharp.cache({files : 0}) // necessaire sous windows a cause des locks de fichier garde en cache https://github.com/lovell/sharp/issues/346
 
 // Inclusion de Mongoose
@@ -29,40 +33,43 @@ const r1 = readline.createInterface({
 });
 
 /* Worker Thread */
-function Process_folder(startPath, output_path, extension, tasks = []){
-	var list = [];
-    if (!fs.existsSync(startPath)){
-        console.log("no dir ",startPath); /* Le dossier n'existe pas */
-        return;
-    }
-
-	var files=fs.readdirSync(startPath);
-	for(const file of files)
-	{
-		const file_path = path.join(startPath, file);
-		const file_output_path = path.join(output_path, file);
-		var stat = fs.lstatSync(file_path);
-		if (stat.isDirectory()){
-			fs.mkdirSync(file_output_path);
-			Process_folder(file_path, file_output_path, extension, tasks);
+async function Process_folder(startPath, output_path, extension, tasks = []){
+	if (isMainThread){
+		var list = [];
+		if (!fs.existsSync(startPath)){
+			console.log("no dir ",startPath); /* Le dossier n'existe pas */
+			return;
 		}
-		else if (file_path.indexOf(extension)>=0) {
-			meta_data_file = file_path;
-			meta_data_file = meta_data_file.substring(0, meta_data_file.lastIndexOf('.'));
-			meta_data_file = meta_data_file.concat('', '.csv');
-			if (fs.existsSync(meta_data_file)){
-				console.log(meta_data_file);
-				// on ajoute l'image à la liste des taches à executer
-				tasks.push(
-					traitement_image(file_path, meta_data_file, file_output_path)
-				);
 
+		var files=fs.readdirSync(startPath);
+		for(const file of files)
+		{
+			const file_path = path.join(startPath, file);
+			const file_output_path = path.join(output_path, file);
+			var stat = fs.lstatSync(file_path);
+			if (stat.isDirectory()){
+				fs.mkdirSync(file_output_path);
+				Process_folder(file_path, file_output_path, extension, tasks);
 			}
+			else if (file_path.indexOf(extension)>=0) {
+				meta_data_file = file_path;
+				meta_data_file = meta_data_file.substring(0, meta_data_file.lastIndexOf('.'));
+				meta_data_file = meta_data_file.concat('', '.csv');
+				if (fs.existsSync(meta_data_file)){
+					console.log(meta_data_file);
+					// on ajoute l'image à la liste des taches à executer
+					/*tasks.push(
+						traitement_image(file_path, meta_data_file, file_output_path)
+					);*/
+					threads.add(new Worker('./scan.js', { workerData: { image_path : file_path, csv_path: meta_data_file, image_output_path : file_output_path }}));
+					console.log('jecreeleworker');
 
-		};
-		// May do : deplacer les fichiers incoherents autre part ?
+				}
+
+			};
+			// May do : deplacer les fichiers incoherents autre part ?
+		}
 	}
-	return Promise.all(tasks); // on lance toutes les taches et on attend qu'elle soient toutes lancées
 	// on sait maintenant que le traitement de toutes les images est termine 
 
 };
@@ -76,7 +83,7 @@ function clean_directory(folder_path){
 		console.log('clearing ' + file_path)
 		var stat = fs.lstatSync(file_path);
 		if (stat.isDirectory()){
-			fs.rmdirSync(file_path, {recursive : true});
+			fs.rmSync(file_path, {recursive : true});
 		}
 		else 
 		{
@@ -133,6 +140,7 @@ function ask(questionText) {
 // la fonction constrauit une promise composite qui attend que le csv et l'image soient traités
 function traitement_image (image_path, csv_path, image_output_path) { // asynchrone 
 
+	console.log('yes');
 	const csv_promise = new Promise(function(resolve, reject){ //la csv promise est une promise qui traite le fichier csv
 
 		fs.readFile(csv_path, 'utf8', function(err, data) {
@@ -159,12 +167,42 @@ function traitement_image (image_path, csv_path, image_output_path) { // asynchr
 
 /* Fonction qui va permettre d'appeler les trois workers toutes les 5 secondes */
 function FromDirs(){
+	var termine = 0;
 	Process_folder('./image',folder_out, '.jpg').then( () => clean_directory('./image')) ;
 	Process_folder('./image1',folder_out, '.jpg').then( () => clean_directory('./image1')) ;
-	Process_folder('./image2',folder_out, '.jpg').then( () => clean_directory('./image2')) ;
-	setTimeout(FromDirs, 5000); // appel des 3 dossiers toutes les secondes task va appeler fromdir 3 fois
+	Process_folder('./image2',folder_out, '.jpg') ;
+	setTimeout(FromDirs, 10000); // appel des 3 dossiers toutes les secondes task va appeler fromdir 3 fois
+	console.log('lenght ' + threads.size);
+	for (let worker of threads) {
+		console.log(` ${threads.size} different threads running...`);
+		console.log(`Thread ID :  ${worker.threadId} `);
+		worker.on('error', (err) => { throw err; });
+		worker.on('exit', () => {
+		  threads.delete(worker);
+		  console.log(`Thread exiting, ${threads.size} running...`);
+		})
+		worker.on('message', (msg) => {
+		  if (msg == 'worker_fini')
+		  {
+			console.log('bienjoué');
+			termine++;
+			console.log(termine);
+			if (termine == threads.size)
+			{
+				clean_directory('./image2');
+			}
+		  }
+		});
+	}
 }
 
 /* Appel des fonctions */
-main();
-FromDirs();
+if (isMainThread){
+	main();
+	FromDirs();
+}
+
+if (!isMainThread){
+	traitement_image(workerData.image_path, workerData.csv_path, workerData.image_output_path);
+	parentPort.postMessage('worker_fini');
+}
